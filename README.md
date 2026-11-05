@@ -1,6 +1,6 @@
 # Real-Time Weapon Detection System
 
-A modular computer vision application that detects weapons in live video using **YOLO (Ultralytics)** and **OpenCV**. It runs in two modes: a CLI for webcams and video files, and a **FastAPI web app** that streams your browser camera to a (remote) GPU server, shows live detections, stores alerts in **SQLite**, and sends **email alerts** with snapshots.
+A modular computer vision application that detects weapons in live video using **YOLO11 (Ultralytics)** and **OpenCV**. It runs in two modes: a CLI for webcams and video files, and a **FastAPI web app** that streams your browser camera to a (remote) GPU server, shows live detections, stores alerts in **SQLite**, and sends **email alerts** with snapshots.
 
 > Educational portfolio project. Not intended for safety-critical use.
 
@@ -9,7 +9,7 @@ A modular computer vision application that detects weapons in live video using *
 ## Features
 
 - Live detection from a webcam, video file, RTSP stream, or the browser camera
-- Custom-trained YOLO model with automatic fallback to a pretrained model
+- Custom-trained YOLO11 model with automatic fallback to a pretrained model
 - Configurable confidence threshold (default `0.60`)
 - Red bounding boxes with `ALERT: <class> (<confidence>%)` labels
 - 3-second alert cooldown (debouncing) to prevent disk flooding
@@ -21,13 +21,14 @@ A modular computer vision application that detects weapons in live video using *
 
 ## Tech Stack
 
-Python 3.10+, Ultralytics YOLO, OpenCV, NumPy, FastAPI, WebSockets, SQLite, `uv`
+Python 3.10+, Ultralytics YOLO11, OpenCV, NumPy, FastAPI, WebSockets, SQLite, `uv`
 
 ## Project Structure
 
 ```
-weapon-detection/
+Weapon_Detection/
 ├── configs/data.yaml            # Example dataset config
+├── docs/                        # Demo GIF and result plots
 ├── scripts/
 │   ├── download_dataset.py      # Roboflow dataset download
 │   └── train.py                 # Training + deploy best.pt
@@ -55,11 +56,22 @@ weapon-detection/
 ## Setup
 
 ```bash
-git clone https://github.com/<your-username>/weapon-detection.git
-cd weapon-detection
+git clone https://github.com/0plaze0/Weapon_Detection.git
+cd Weapon_Detection
 uv sync
 cp .env.example .env     # then fill in your values
 ```
+
+### Model weights
+
+Weights are not stored in git. Download them from the [Releases page](https://github.com/0plaze0/Weapon_Detection/releases):
+
+```bash
+mkdir -p weights
+wget -O weights/best.pt https://github.com/0plaze0/Weapon_Detection/releases/download/v1.0/best.pt
+```
+
+Without `weights/best.pt`, the app falls back to a generic pretrained COCO model for structure testing only.
 
 ### Environment variables (`.env`)
 
@@ -122,36 +134,56 @@ uv run weapon-detect --source test.mp4 --headless --output results/out.mp4
    ```
 2. Train and deploy to `weights/best.pt`:
    ```bash
-   uv run python scripts/train.py --data <dataset-folder>/data.yaml --model yolo11s.pt --epochs 100
+   uv run python scripts/train.py --data datasets/weapon-detection-16/data.yaml --model yolo11s.pt --epochs 100
    ```
-3. Evaluate on the test split:
+3. Evaluate:
    ```bash
-   uv run yolo detect val model=weights/best.pt data=<dataset-folder>/data.yaml split=test
+   uv run yolo detect val model=weights/best.pt data=datasets/weapon-detection-16/data.yaml split=val
    ```
 
 Dataset layout (`configs/data.yaml`):
 
 ```yaml
-path: ./datasets/weapons
+path: ./datasets/weapon-detection-16
 train: train/images
 val: valid/images
-test: test/images
-nc: 2
+nc: 3
 names:
   0: gun
   1: heavy-weapon
+  2: knife
 ```
 
 ## Results
 
-| Metric | Value |
-|---|---|
-| mAP@0.5 | _fill in_ |
-| mAP@0.5:0.95 | _fill in_ |
-| Precision | _fill in_ |
-| Recall | _fill in_ |
+**Model:** YOLO11s (9.4M parameters, 21.4 GFLOPs) fine-tuned on a Roboflow weapon detection dataset.
+**Evaluated on:** the validation split (1,491 images, 1,540 instances). The dataset has no separate test split, so these numbers are slightly optimistic.
 
-Add `confusion_matrix.png` and `results.png` from `runs/weapons/` here.
+| Class | Images | Instances | Precision | Recall | mAP@0.5 | mAP@0.5:0.95 |
+|---|---|---|---|---|---|---|
+| **All** | 1491 | 1540 | 0.896 | 0.486 | 0.531 | 0.372 |
+| gun | 362 | 396 | 0.789 | 0.613 | 0.681 | 0.430 |
+| heavy-weapon | 779 | 920 | 0.898 | 0.847 | 0.911 | 0.685 |
+| knife | 195 | 224 | 1.000 | 0.000 | 0.000 | 0.000 |
+
+**Reading the results**
+
+- `heavy-weapon` performs well (mAP@0.5 of 0.911).
+- `gun` is reasonable but misses about 4 in 10 instances at the evaluation threshold.
+- `knife` is **not detected at all** (recall 0). The model has effectively not learned this class, so knife alerts should not be relied on. Likely causes are label noise, very small or thin objects, or too few usable training examples; the planned fix is to inspect the knife annotations, add more varied knife images, and retrain.
+- The overall recall of 0.486 is pulled down by the knife class. Excluding it, recall on the other two classes averages about 0.73.
+
+### Training curves
+![Training results](docs/results.png)
+
+### Confusion matrix
+![Confusion matrix](docs/confusion_matrix.png)
+
+### Precision-recall curve
+![PR curve](docs/pr_curve.png)
+
+### Sample predictions
+![Predictions](docs/sample_predictions.jpg)
 
 ## How It Works
 
@@ -160,10 +192,17 @@ Add `confusion_matrix.png` and `results.png` from `runs/weapons/` here.
 3. Detections above the confidence threshold are returned as `[x1, y1, x2, y2]`, class, and confidence, and drawn on the page.
 4. If a threat is found and the cooldown has elapsed, the server saves the annotated snapshot, writes a row to SQLite, prints a structured log line, and sends an email.
 
+## Deployment
+
+- **GPU server:** run `uv run weapon-serve` and expose it over HTTPS for live demos, for example with `cloudflared tunnel --url http://localhost:9999`.
+- **Hugging Face Spaces (Gradio):** a lightweight CPU demo can be hosted for free using the Gradio SDK.
+- Free hosting tiers are CPU-only and memory-limited, so expect only a few FPS and an ephemeral disk (the alert database resets on restart).
+
 ## Limitations
 
+- The `knife` class is not detected (see Results).
 - Performance depends on dataset quality, lighting, camera angle, and distance.
-- Toy, airsoft, and real firearms can be confused with each other, and some objects may be mislabeled.
+- Toy, airsoft, and real firearms can be confused with each other, and everyday objects can be mislabeled.
 - False positives and false negatives are both possible; do not rely on this for real security decisions.
 - Single-camera, single-process design; no authentication on the web app.
 
@@ -174,7 +213,7 @@ This project is for learning and demonstration. Weapon detection systems can pro
 ## Credits
 
 - [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
-- Dataset: _add Roboflow Universe dataset name, author, and license_
+- Dataset: Roboflow Universe, workspace `yolov7test-u13vc`, project `weapon-detection-m7qso`, version 16 (add the license shown on the dataset page)
 
 ## License
 

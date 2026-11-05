@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir torch torchvision --index-url https://download.py
 ADD --chown=user https://github.com/<user>/weapon-detection/releases/download/v1.0/best.pt weights/best.pt
 
 EXPOSE 7860
-CMD ["weapon-serve", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["weapon-serve", "--host", "0.0.0.0", "--port", "7860"]`

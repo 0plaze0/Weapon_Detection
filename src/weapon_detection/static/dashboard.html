@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alert Dashboard</title>
+<style>
+  :root { --bg:#0b0e14; --panel:#131822; --border:#232b3a; --text:#e6e9ef; --muted:#8a94a7;
+          --accent:#3b82f6; --danger:#ef4444; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:14px 24px;
+           background:var(--panel); border-bottom:1px solid var(--border); }
+  header b { font-size:16px; }
+  nav a { color:var(--muted); text-decoration:none; margin-left:18px; font-weight:600; font-size:14px; }
+  nav a.on, nav a:hover { color:var(--text); }
+  main { max-width:1400px; margin:0 auto; padding:20px 24px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:18px; }
+  .stat small { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.8px; }
+  .stat b { display:block; font-size:30px; margin-top:6px; }
+  .stat.d b { color:var(--danger); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+  @media (max-width:900px) { .row { grid-template-columns:1fr; } }
+  h3 { margin:0 0 12px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  .bar { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:13px; }
+  .bar span:first-child { width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar .t { flex:1; height:10px; background:#0f141d; border-radius:5px; overflow:hidden; }
+  .bar .t i { display:block; height:100%; background:var(--danger); }
+  .hours { display:flex; align-items:flex-end; gap:4px; height:120px; }
+  .hours div { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
+  .toolbar { display:flex; gap:10px; margin-bottom:14px; align-items:center; }
+  select, button { background:#1a2130; color:var(--text); border:1px solid var(--border);
+                   padding:8px 12px; border-radius:8px; font-size:14px; cursor:pointer; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .item { background:#0f141d; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .item img { width:100%; display:block; cursor:pointer; }
+  .item .body { padding:12px; display:grid; gap:8px; font-size:13px; }
+  .item .top { display:flex; justify-content:space-between; }
+  .item .top b { color:var(--danger); }
+  .conf { height:6px; background:#1a2130; border-radius:4px; overflow:hidden; }
+  .conf i { display:block; height:100%; background:var(--danger); }
+  .item .foot { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }
+  .item .foot button { padding:3px 10px; font-size:12px; }
+  .empty { color:var(--muted); text-align:center; padding:40px 0; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; align-items:center;
+           justify-content:center; padding:20px; }
+  #modal img { max-width:100%; max-height:100%; border-radius:10px; }
+</style>
+</head>
+<body>
+<header>
+  <b>Weapon Detection System</b>
+  <nav><a href="/">Live</a><a href="/dashboard" class="on">Dashboard</a></nav>
+</header>
+<main>
+  <div class="stats">
+    <div class="card stat d"><small>Total alerts</small><b id="total">0</b></div>
+    <div class="card stat"><small>Today</small><b id="today">0</b></div>
+    <div class="card stat"><small>Avg confidence</small><b id="avg">0%</b></div>
+    <div class="card stat"><small>Top class</small><b id="top" style="font-size:22px">-</b></div>
+  </div>
+  <div class="row">
+    <div class="card"><h3>Alerts by class</h3><div id="byClass"></div></div>
+    <div class="card"><h3>Alerts per hour (last 24 active)</h3><div class="hours" id="byHour"></div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1">Alert history</h3>
+      <select id="filter"><option value="">All classes</option></select>
+      <button id="refresh">Refresh</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+<div id="modal"><img id="big" alt=""></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function loadStats() {
+  const s = await (await fetch("/api/stats")).json();
+  $("total").textContent = s.total;
+  $("today").textContent = s.today;
+  $("avg").textContent = Math.round(s.avg_conf * 100) + "%";
+  $("top").textContent = s.by_class[0]?.class_name ?? "-";
+
+  const max = Math.max(1, ...s.by_class.map(c => c.count));
+  $("byClass").innerHTML = s.by_class.map(c =>
+    `<div class="bar"><span>${c.class_name}</span><div class="t"><i style="width:${c.count / max * 100}%"></i></div><span>${c.count}</span></div>`
+  ).join("") || '<div class="empty">No data</div>';
+
+  const hmax = Math.max(1, ...s.by_hour.map(h => h.count));
+  $("byHour").innerHTML = s.by_hour.map(h =>
+    `<div title="${h.hour.replace("T", " ")}:00 - ${h.count}" style="height:${h.count / hmax * 100}%"></div>`
+  ).join("");
+
+  const sel = $("filter"), cur = sel.value;
+  sel.innerHTML = '<option value="">All classes</option>' +
+    s.by_class.map(c => `<option>${c.class_name}</option>`).join("");
+  sel.value = cur;
+}
+
+async function loadAlerts() {
+  const q = $("filter").value ? `&class_name=${encodeURIComponent($("filter").value)}` : "";
+  const rows = await (await fetch(`/api/alerts?limit=60${q}`)).json();
+  $("grid").innerHTML = rows.map(r => {
+    const pct = Math.round(r.confidence * 100);
+    return `<div class="item">
+      <img src="/alert-images/${r.image}" loading="lazy" onclick="zoom(this.src)">
+      <div class="body">
+        <div class="top"><b>${r.class_name.toUpperCase()}</b><span>${pct}%</span></div>
+        <div class="conf"><i style="width:${pct}%"></i></div>
+        <div class="foot"><span>${r.ts.replace("T", " ")}</span>
+          <button onclick="del(${r.id})">Delete</button></div>
+      </div></div>`;
+  }).join("") || '<div class="empty" style="grid-column:1/-1">No alerts recorded yet</div>';
+}
+
+async function del(id) {
+  if (!confirm("Delete this alert?")) return;
+  await fetch(`/api/alerts/${id}`, { method: "DELETE" });
+  refresh();
+}
+
+function zoom(src) { $("big").src = src; $("modal").style.display = "flex"; }
+$("modal").onclick = () => $("modal").style.display = "none";
+$("filter").onchange = loadAlerts;
+$("refresh").onclick = refresh;
+
+function refresh() { loadStats(); loadAlerts(); }
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

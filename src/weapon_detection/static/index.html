@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weapon Detection System</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131822; --border: #232b3a; --text: #e6e9ef;
+    --muted: #8a94a7; --accent: #3b82f6; --ok: #22c55e; --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between;
+           padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
+  .brand svg { width: 22px; height: 22px; color: var(--accent); }
+  .pill { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+          background: #0f141d; border: 1px solid var(--border); font-size: 13px; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .pill.active .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: pulse 1.6s infinite; }
+  .pill.paused .dot { background: #f59e0b; }
+  .pill.off .dot { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px;
+         padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+  #stage { position: relative; overflow: hidden; background: #000; transition: box-shadow .2s, border-color .2s; }
+  #stage.alert { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger), 0 0 32px rgba(239,68,68,.45); }
+  video, #overlay { width: 100%; display: block; }
+  #overlay { position: absolute; inset: 0; height: 100%; }
+  .corner { position: absolute; width: 26px; height: 26px; border: 2px solid rgba(255,255,255,.55); }
+  .tl { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
+  .tr { top: 12px; right: 12px; border-left: 0; border-bottom: 0; }
+  .bl { bottom: 12px; left: 12px; border-right: 0; border-top: 0; }
+  .br { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
+  .hud { position: absolute; top: 14px; left: 50px; font: 600 13px ui-monospace, monospace;
+         background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 6px; color: var(--ok); }
+  #banner { position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 18px; text-align: center;
+            font-weight: 700; letter-spacing: 1px; background: rgba(239,68,68,.92);
+            transform: translateY(100%); transition: transform .2s; }
+  #stage.alert #banner { transform: translateY(0); }
+
+  .controls { display: flex; gap: 10px; padding: 14px; flex-wrap: wrap; }
+  button { padding: 10px 18px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+           background: #1a2130; color: var(--text); font-size: 14px; font-weight: 600; transition: .15s; }
+  button:hover { background: #222b3f; }
+  button.primary { background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { background: #2f6fe0; }
+  .check { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); font-size: 14px; }
+
+  aside { display: flex; flex-direction: column; gap: 20px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+  .stat { background: #0f141d; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .stat small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+  .stat b { display: block; font-size: 26px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat.danger b { color: var(--danger); }
+
+  .log-head { padding: 14px 16px; font-weight: 700; border-bottom: 1px solid var(--border);
+              display: flex; justify-content: space-between; align-items: center; }
+  .log-head button { padding: 4px 10px; font-size: 12px; }
+  #log { list-style: none; margin: 0; padding: 8px; max-height: 340px; overflow-y: auto; }
+  #log li { display: flex; flex-direction: column; gap: 8px; padding: 10px; margin-bottom: 10px;
+          background: #0f141d; border: 1px solid var(--border); border-left: 3px solid var(--danger);
+          border-radius: 8px; font-size: 13px; }
+#log li img { width: 100%; border-radius: 6px; display: block; }
+#log .meta { display: flex; justify-content: space-between; align-items: center; }
+#log .meta b { color: var(--danger); }
+#log .conf { height: 6px; background: #1a2130; border-radius: 4px; overflow: hidden; }
+#log .conf i { display: block; height: 100%; background: var(--danger); }
+#log .time { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+#log { max-height: 640px; }
+  #log li span:last-child { color: var(--muted); font-family: ui-monospace, monospace; }
+  .empty { color: var(--muted); text-align: center; padding: 28px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+    Weapon Detection System
+  </div>
+  <nav style="margin-left:auto;margin-right:20px"><a href="/dashboard" style="color:#8a94a7;text-decoration:none;font-weight:600;font-size:14px">Dashboard →</a></nav>
+  <div id="pill" class="pill"><span class="dot"></span><span id="state">CONNECTING</span></div>
+</header>
+
+<main>
+  <section>
+    <div id="stage" class="card">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="hud" id="fps">FPS 0.0</div>
+      <div id="banner">⚠ THREAT DETECTED</div>
+    </div>
+    <div class="card controls" style="margin-top:14px">
+      <button id="toggle" class="primary">Pause</button>
+      <button id="snap">Save snapshot</button>
+      <label class="check"><input type="checkbox" id="sound" checked> Alert sound</label>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card stats">
+      <div class="stat"><small>FPS</small><b id="sFps">0.0</b></div>
+      <div class="stat"><small>Latency</small><b id="sLat">0 ms</b></div>
+      <div class="stat danger"><small>Threats</small><b id="sThreat">0</b></div>
+      <div class="stat"><small>In frame</small><b id="sNow">0</b></div>
+    </div>
+    <div class="card">
+      <div class="log-head">Alert log <button id="clear">Clear</button></div>
+      <ul id="log"><li class="empty" style="display:block;border:0;background:none">No alerts yet</li></ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $("video"), overlay = $("overlay"), octx = overlay.getContext("2d");
+const grab = document.createElement("canvas"), gctx = grab.getContext("2d");
+const WIDTH = 640, QUALITY = 0.7, LOG_COOLDOWN_MS = 3000, LOG_MAX = 50;
+let ws, running = true, sentAt = 0, lastLog = 0, logCount = 0, audioCtx = null;
+
+function setState(text, cls) {
+  $("state").textContent = text;
+  $("pill").className = "pill " + cls;
+}
+
+function beep() {
+  if (!$("sound").checked) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "square"; o.frequency.value = 880; g.gain.value = 0.05;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+function addLog(d) {
+  const ul = $("log");
+  if (!logCount) ul.innerHTML = "";
+
+  // Snapshot = current video frame + the box overlay
+  const c = document.createElement("canvas");
+  c.width = overlay.width || 640; c.height = overlay.height || 360;
+  const x = c.getContext("2d");
+  x.drawImage(video, 0, 0, c.width, c.height);
+  x.drawImage(overlay, 0, 0);
+  const pct = Math.round(d.conf * 100);
+
+  const li = document.createElement("li");
+  li.innerHTML = `
+    <img src="${c.toDataURL("image/jpeg", 0.8)}" alt="threat snapshot">
+    <div class="meta"><b>${d.label.toUpperCase()}</b><span>${pct}%</span></div>
+    <div class="conf"><i style="width:${pct}%"></i></div>
+    <div class="time">${new Date().toLocaleTimeString()}</div>`;
+  ul.prepend(li);
+  logCount++;
+  while (ul.children.length > LOG_MAX) ul.lastChild.remove();
+}
+function draw(dets) {
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  octx.lineWidth = 3;
+  octx.font = "bold 15px Inter, sans-serif";
+  for (const d of dets) {
+    const [x1, y1, x2, y2] = d.box;
+    const text = `ALERT: ${d.label} (${Math.round(d.conf * 100)}%)`;
+    const tw = octx.measureText(text).width + 12, ty = Math.max(y1 - 26, 0);
+    octx.strokeStyle = "#ef4444";
+    octx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    octx.fillStyle = "#ef4444";
+    octx.fillRect(x1, ty, tw, 26);
+    octx.fillStyle = "#fff";
+    octx.fillText(text, x1 + 6, ty + 18);
+  }
+}
+
+function sendFrame() {
+  if (!running || !ws || ws.readyState !== WebSocket.OPEN || video.videoWidth === 0) {
+    return setTimeout(sendFrame, 100);
+  }
+  grab.width = WIDTH;
+  grab.height = Math.round(WIDTH * video.videoHeight / video.videoWidth);
+  overlay.width = grab.width; overlay.height = grab.height;
+  gctx.drawImage(video, 0, 0, grab.width, grab.height);
+  grab.toBlob(b => { if (b) { sentAt = performance.now(); ws.send(b); } }, "image/jpeg", QUALITY);
+}
+
+function connect() {
+  setState("CONNECTING", "");
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onopen = () => { setState(running ? "ACTIVE" : "PAUSED", running ? "active" : "paused"); sendFrame(); };
+  ws.onmessage = ev => {
+    const r = JSON.parse(ev.data), n = r.detections.length;
+    draw(r.detections);
+    $("fps").textContent = `FPS ${r.fps.toFixed(1)}`;
+    $("sFps").textContent = r.fps.toFixed(1);
+    $("sLat").textContent = `${Math.round(performance.now() - sentAt)} ms`;
+    $("sThreat").textContent = r.threats;
+    $("sNow").textContent = n;
+    $("stage").classList.toggle("alert", n > 0);
+    if (n > 0 && performance.now() - lastLog > LOG_COOLDOWN_MS) {
+      lastLog = performance.now();
+      addLog(r.detections.reduce((a, b) => (b.conf > a.conf ? b : a)));
+      beep();
+    }
+    sendFrame();
+  };
+  ws.onclose = () => { setState("DISCONNECTED", "off"); setTimeout(connect, 2000); };
+}
+
+$("toggle").onclick = () => {
+  running = !running;
+  $("toggle").textContent = running ? "Pause" : "Resume";
+  setState(running ? "ACTIVE" : "PAUSED", running ? "active" : "paused");
+  if (running) sendFrame();
+  else { octx.clearRect(0, 0, overlay.width, overlay.height); $("stage").classList.remove("alert"); }
+};
+
+$("snap").onclick = () => {
+  const c = document.createElement("canvas");
+  c.width = grab.width || 640; c.height = grab.height || 360;
+  const x = c.getContext("2d");
+  x.drawImage(video, 0, 0, c.width, c.height);
+  x.drawImage(overlay, 0, 0);
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/jpeg", 0.9);
+  a.download = `snapshot_${Date.now()}.jpg`;
+  a.click();
+};
+
+$("clear").onclick = () => {
+  logCount = 0;
+  $("log").innerHTML = '<li class="empty" style="display:block;border:0;background:none">No alerts yet</li>';
+};
+
+navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
+  .then(s => { video.srcObject = s; connect(); })
+  .catch(e => { setState("CAMERA ERROR", "off"); console.error(e); });
+</script>
+</body>
+</html> 

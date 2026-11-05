@@ -1,0 +1,21 @@
+# Environment
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# Data and outputs
+datasets/
+weapon-detection-*/
+runs/
+results/
+*.mp4
+
+# Alerts (keep the folder, ignore contents)
+alerts/*
+!alerts/.gitkeep
+
+# Model weights
+weights/*
+!weights/.gitkeep
+*.pt

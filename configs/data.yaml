@@ -1,0 +1,9 @@
+path: ./datasets/weapons
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 2
+names:
+  0: handgun
+  1: knife

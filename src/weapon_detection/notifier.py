@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from http import server
 import os
 import smtplib
 import threading
@@ -66,8 +67,7 @@ class EmailNotifier:
             else:
                 server = smtplib.SMTP(self.host, self.port, timeout=20)
                 server.starttls()
-            with server:    def send_photo(self, image_path: Path, caption: str) -> None:
-        print(f"[DEBUG] send_photo called, enabled={self.enabled}")
+            with server:   
                 server.login(self.user, self.password)
                 server.send_message(msg)
         except Exception as exc:

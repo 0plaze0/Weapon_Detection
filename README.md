@@ -1,23 +1,20 @@
 # Real-Time Weapon Detection System
 
-A modular computer vision application that detects weapons in live video using **YOLO11 (Ultralytics)** and **OpenCV**. It runs in two modes: a CLI for webcams and video files, and a **FastAPI web app** that streams your browser camera to a (remote) GPU server, shows live detections, stores alerts in **SQLite**, and sends **email alerts** with snapshots.
+A computer vision application that detects weapons in live video using **YOLO11 (Ultralytics)** and **OpenCV**. A **FastAPI web app** that streams your browser camera to a (remote) GPU server, shows live detections, stores alerts in **SQLite**, and sends **email alerts** with snapshots.
 
-> Educational portfolio project. Not intended for safety-critical use.
 
-![Demo](docs/demo.gif)
+[![Demo](docs/Demo.jpg)](https://youtu.be/RP7mJQqGDMA)
 
 ## Features
 
 - Live detection from a webcam, video file, RTSP stream, or the browser camera
 - Custom-trained YOLO11 model with automatic fallback to a pretrained model
-- Configurable confidence threshold (default `0.60`)
-- Red bounding boxes with `ALERT: <class> (<confidence>%)` labels
 - 3-second alert cooldown (debouncing) to prevent disk flooding
 - Annotated snapshots saved to `alerts/`
 - SQLite alert history with a web dashboard (stats, charts, filter, delete)
 - Email alerts with the snapshot attached (SMTP)
 - Live UI with FPS, latency, threat counter, alert sound, and a snapshot panel
-- Headless mode for servers
+
 
 ## Tech Stack
 
